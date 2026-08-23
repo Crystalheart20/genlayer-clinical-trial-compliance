@@ -1,0 +1,51 @@
+# v0.1.0
+# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+
+from genlayer import *
+
+class ClinicalTrialAttestation(gl.Contract):
+    protocol_name: str
+    protocol_rules: str
+    attestation_records: TreeMap[str, str]
+
+    def __init__(self, protocol_name: str, protocol_rules: str):
+        self.protocol_name = protocol_name
+        self.protocol_rules = protocol_rules
+        self.attestation_records = TreeMap()
+
+    @gl.public.write
+    def evaluate_and_record_event(self, patient_id: str, event_summary: str) -> str:
+        task = f"""
+        Protocol Rules: {self.protocol_rules}
+        Patient Event: {event_summary}
+        
+        Task: Output ONLY 'COMPLIANT' if the event adheres to all protocol rules, or 'VIOLATION' if it breaches any rule.
+        """
+        
+        criteria = "The response must be strictly either 'COMPLIANT' or 'VIOLATION' based on the protocol rules."
+
+        verdict = gl.eq_principle.prompt_non_comparative(
+            lambda: event_summary,
+            task=task,
+            criteria=criteria
+        ).strip().upper()
+
+        if "VIOLATION" in verdict:
+            final_status = "VIOLATION"
+        else:
+            final_status = "COMPLIANT"
+
+        self.attestation_records[patient_id] = f"{final_status} | {event_summary}"
+        return final_status
+
+    @gl.public.view
+    def get_attestation(self, patient_id: str) -> str:
+        return self.attestation_records.get(patient_id, "NOT_FOUND")
+
+    @gl.public.view
+    def get_protocol_name(self) -> str:
+        return self.protocol_name
+
+    @gl.public.view
+    def get_protocol_rules(self) -> str:
+        return self.protocol_rules
